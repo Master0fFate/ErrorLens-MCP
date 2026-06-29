@@ -1,0 +1,48 @@
+{
+  "name": "mcp-errorlens",
+  "version": "0.1.0",
+  "description": "Structured error recovery for MCP agents.",
+  "type": "module",
+  "bin": {
+    "errorlens": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.tests.json",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "node --test \"dist-tests/tests/*.test.js\"",
+    "verify": "npm run lint && npm run build && npm test",
+    "start:companion": "node dist/companion/diagnostic-server.js",
+    "start:proxy": "node dist/proxy/proxy-server.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "errors",
+    "recovery",
+    "agents"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "commander": "15.0.0",
+    "yaml": "2.9.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.16",
+    "@types/node": "24.10.1",
+    "typescript": "6.0.3"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

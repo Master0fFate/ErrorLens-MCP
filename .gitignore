@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-tests/
+coverage/
+*.tsbuildinfo
+.errorlens/
+.omo/
+.codegraph/
+npm-debug.log*
+*.tgz
+.env
+.env.*
+!.env.example

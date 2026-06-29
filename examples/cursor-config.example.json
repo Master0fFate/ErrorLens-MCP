@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "errorlens-proxy": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/mcp-errorlens/dist/proxy/proxy-server.js",
+        "--config",
+        "/absolute/path/to/.errorlens/config.yaml"
+      ]
+    }
+  }
+}

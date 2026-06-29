@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "errorlens": {
+      "command": "node",
+      "args": ["/absolute/path/to/mcp-errorlens/dist/companion/diagnostic-server.js"]
+    }
+  }
+}

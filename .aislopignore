@@ -1,0 +1,8 @@
+dist/
+dist-tests/
+node_modules/
+coverage/
+.omo/
+.omo/**
+**/.omo/**
+.omo/ulw-loop/tmp/
