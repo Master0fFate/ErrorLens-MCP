@@ -43,20 +43,23 @@ to a cloud service and it has no model or API-key dependency.
 
 ## Install
 
-Use the tagged GitHub release source:
+Install from npm:
+
+```sh
+npm install -g mcp-errorlens
+errorlens --help
+```
+
+Or run it without a global install:
+
+```sh
+npx mcp-errorlens --help
+```
+
+Install the tagged GitHub release from source:
 
 ```sh
 git clone --branch v0.1.0 https://github.com/Master0fFate/ErrorLens-MCP.git
-cd ErrorLens-MCP
-npm install
-npm run build
-npm run verify
-```
-
-Or install the current `main` branch from source:
-
-```sh
-git clone https://github.com/Master0fFate/ErrorLens-MCP.git
 cd ErrorLens-MCP
 npm install
 npm run build
@@ -79,19 +82,29 @@ errorlens --help
 The compiled package uses portable Node APIs and is designed to work on Windows,
 Linux, and macOS.
 
-The package is prepared for npm publishing, but the initial release is distributed
-through GitHub source until an npm package is published.
-
 ## Companion MCP Server
 
-Build the project first, then add the companion server to an MCP client:
+For a global npm install:
 
 ```json
 {
   "mcpServers": {
     "errorlens": {
-      "command": "node",
-      "args": ["/absolute/path/to/mcp-errorlens/dist/companion/diagnostic-server.js"]
+      "command": "errorlens-companion",
+      "args": []
+    }
+  }
+}
+```
+
+For `npx` without a global install:
+
+```json
+{
+  "mcpServers": {
+    "errorlens": {
+      "command": "npx",
+      "args": ["-y", "--package", "mcp-errorlens", "errorlens-companion"]
     }
   }
 }
@@ -111,13 +124,13 @@ Tools:
 Create a local config:
 
 ```sh
-node dist/cli/index.js init --dir .errorlens
+errorlens init --dir .errorlens
 ```
 
 Edit `.errorlens/config.yaml`, then run:
 
 ```sh
-node dist/cli/index.js proxy --config .errorlens/config.yaml
+errorlens proxy --config .errorlens/config.yaml
 ```
 
 For stdio upstreams, ErrorLens lists the upstream tools and forwards calls. Tool
@@ -127,13 +140,13 @@ and a structured ErrorLens JSON payload. Successful tool responses are preserved
 ## CLI Commands
 
 ```sh
-node dist/cli/index.js init --dir .errorlens
-node dist/cli/index.js doctor --config .errorlens/config.yaml
-node dist/cli/index.js report --trace .errorlens/traces.jsonl
-node dist/cli/index.js replay --trace .errorlens/traces.jsonl
-node dist/cli/index.js traces --trace .errorlens/traces.jsonl
-node dist/cli/index.js rules test --config .errorlens/config.yaml
-node dist/cli/index.js proxy --config .errorlens/config.yaml
+errorlens init --dir .errorlens
+errorlens doctor --config .errorlens/config.yaml
+errorlens report --trace .errorlens/traces.jsonl
+errorlens replay --trace .errorlens/traces.jsonl
+errorlens traces --trace .errorlens/traces.jsonl
+errorlens rules test --config .errorlens/config.yaml
+errorlens proxy --config .errorlens/config.yaml
 ```
 
 ## Demo
