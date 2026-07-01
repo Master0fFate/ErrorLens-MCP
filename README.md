@@ -43,6 +43,18 @@ to a cloud service and it has no model or API-key dependency.
 
 ## Install
 
+Use the tagged GitHub release source:
+
+```sh
+git clone --branch v0.1.0 https://github.com/Master0fFate/ErrorLens-MCP.git
+cd ErrorLens-MCP
+npm install
+npm run build
+npm run verify
+```
+
+Or install the current `main` branch from source:
+
 ```sh
 git clone https://github.com/Master0fFate/ErrorLens-MCP.git
 cd ErrorLens-MCP
@@ -66,6 +78,9 @@ errorlens --help
 
 The compiled package uses portable Node APIs and is designed to work on Windows,
 Linux, and macOS.
+
+The package is prepared for npm publishing, but the initial release is distributed
+through GitHub source until an npm package is published.
 
 ## Companion MCP Server
 

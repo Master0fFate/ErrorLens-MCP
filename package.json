@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "description": "Structured error recovery for MCP agents.",
   "type": "module",
+  "homepage": "https://github.com/Master0fFate/ErrorLens-MCP#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Master0fFate/ErrorLens-MCP.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Master0fFate/ErrorLens-MCP/issues"
+  },
   "bin": {
     "errorlens": "./dist/cli/index.js"
   },
@@ -25,11 +33,17 @@
   "keywords": [
     "mcp",
     "model-context-protocol",
+    "mcp-server",
     "errors",
+    "error-handling",
     "recovery",
-    "agents"
+    "retry-safety",
+    "agents",
+    "ai-agents",
+    "observability",
+    "local-first"
   ],
-  "author": "",
+  "author": "Master0fFate",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
