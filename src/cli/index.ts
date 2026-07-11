@@ -1,10 +1,15 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from "node:fs/promises"
-import { dirname, resolve } from "node:path"
+import { readFile } from "node:fs/promises"
+import { resolve } from "node:path"
 import { Command } from "commander"
-import { loadConfig, resolveConfigRelative, writeDefaultConfig } from "../config/load-config.js"
+import { loadConfig, writeDefaultConfig } from "../config/load-config.js"
 import { parseAdapterRules } from "../core/adapters.js"
 import { startProxyServer } from "../proxy/proxy-server.js"
+import {
+  createErrorLensSession,
+  disposeErrorLensSession,
+  sessionTracePath,
+} from "../session/session-context.js"
 import { JsonlTraceStore } from "../trace/jsonl-store.js"
 import { formatTraceReplay } from "../trace/replay.js"
 import { summarizeFailures } from "../trace/report.js"
@@ -31,49 +36,53 @@ program
   .action(async (options: { readonly config: string }) => {
     const configPath = resolve(options.config)
     const config = await loadConfig(configPath)
-    const tracePath = resolveConfigRelative(configPath, config.trace.path)
-    await mkdir(dirname(tracePath), { recursive: true })
-    await writeFile(tracePath, "", { flag: "a", encoding: "utf8" })
-    const commandChecks = await Promise.all(
-      Object.entries(config.servers).map(async ([serverName, serverConfig]) => {
-        if (serverConfig.transport !== "stdio") {
+    const session = await createErrorLensSession()
+    try {
+      const tracePath = sessionTracePath(session, config.trace.path)
+      const commandChecks = await Promise.all(
+        Object.entries(config.servers).map(async ([serverName, serverConfig]) => {
+          if (serverConfig.transport !== "stdio") {
+            return {
+              server: serverName,
+              transport: serverConfig.transport,
+              command_available: null,
+              endpoint_configured: true,
+              note: "",
+            }
+          }
           return {
             server: serverName,
             transport: serverConfig.transport,
-            command_available: null,
+            command_available: await commandAvailable(serverConfig.command, {
+              ...process.env,
+              ...serverConfig.env,
+            }),
             endpoint_configured: true,
             note: "",
           }
-        }
-        return {
-          server: serverName,
-          transport: serverConfig.transport,
-          command_available: await commandAvailable(serverConfig.command, {
-            ...process.env,
-            ...serverConfig.env,
-          }),
-          endpoint_configured: true,
-          note: "",
-        }
-      }),
-    )
-    console.log(
-      JSON.stringify(
-        {
-          ok: commandChecks.every((check) =>
-            check.transport === "streamable_http"
-              ? check.endpoint_configured
-              : check.command_available,
-          ),
-          config: configPath,
-          trace_path: tracePath,
-          servers: commandChecks,
-          telemetry: "disabled",
-        },
-        null,
-        2,
-      ),
-    )
+        }),
+      )
+      console.log(
+        JSON.stringify(
+          {
+            ok: commandChecks.every((check) =>
+              check.transport === "streamable_http"
+                ? check.endpoint_configured
+                : check.command_available,
+            ),
+            config: configPath,
+            trace_path: tracePath,
+            trace_scope: "session_temp",
+            servers: commandChecks,
+            telemetry: "disabled",
+          },
+          null,
+          2,
+        ),
+      )
+    } finally {
+      await disposeErrorLensSession(session)
+    }
   })
 
 program

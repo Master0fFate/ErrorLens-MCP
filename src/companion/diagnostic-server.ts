@@ -4,6 +4,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod"
 import {
+  createErrorLensSession,
+  disposeErrorLensSession,
+  registerSessionExitCleanup,
+} from "../session/session-context.js"
+import {
   classifyErrorTool,
   generateAdapterRuleTool,
   recommendRecoveryTool,
@@ -12,14 +17,18 @@ import {
   summarizeFailuresTool,
 } from "./mcp-tools.js"
 
-export function buildDiagnosticServer(): McpServer {
+export type DiagnosticServerOptions = {
+  readonly tracePath?: string
+}
+
+export function buildDiagnosticServer(options: DiagnosticServerOptions = {}): McpServer {
   const server = new McpServer({
     name: "mcp-errorlens",
     version: "0.1.0",
   })
 
   registerClassificationTools(server)
-  registerTraceTools(server)
+  registerTraceTools(server, options.tracePath)
   registerAdapterTools(server)
   return server
 }
@@ -58,7 +67,7 @@ function registerClassificationTools(server: McpServer): void {
   )
 }
 
-function registerTraceTools(server: McpServer): void {
+function registerTraceTools(server: McpServer, defaultTracePath: string | undefined): void {
   server.registerTool(
     "replay_trace",
     {
@@ -68,7 +77,7 @@ function registerTraceTools(server: McpServer): void {
         trace_path: z.string().optional(),
       },
     },
-    async (input) => replayTraceTool(input),
+    async (input) => replayTraceTool(input, defaultTracePath),
   )
 
   server.registerTool(
@@ -81,7 +90,7 @@ function registerTraceTools(server: McpServer): void {
         tool_name: z.string().optional(),
       },
     },
-    async (input) => summarizeFailuresTool(input),
+    async (input) => summarizeFailuresTool(input, defaultTracePath),
   )
 }
 
@@ -112,8 +121,32 @@ function registerAdapterTools(server: McpServer): void {
 }
 
 export async function startDiagnosticServer(): Promise<void> {
-  const server = buildDiagnosticServer()
-  await server.connect(new StdioServerTransport())
+  const session = await createErrorLensSession()
+  const unregisterExitCleanup = registerSessionExitCleanup(session)
+  let cleanedUp = false
+  const cleanup = async (): Promise<void> => {
+    if (cleanedUp) {
+      return
+    }
+    cleanedUp = true
+    unregisterExitCleanup()
+    process.stdin.removeListener("end", cleanupOnStdinEnd)
+    await disposeErrorLensSession(session)
+  }
+  const cleanupOnStdinEnd = (): void => {
+    void cleanup().catch(() => undefined)
+  }
+  process.stdin.once("end", cleanupOnStdinEnd)
+  const server = buildDiagnosticServer({ tracePath: session.tracePath })
+  server.server.onclose = () => {
+    void cleanup()
+  }
+  try {
+    await server.connect(new StdioServerTransport())
+  } catch (error) {
+    await cleanup()
+    throw error
+  }
 }
 
 const entry = process.argv[1]

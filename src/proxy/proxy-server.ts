@@ -8,8 +8,14 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js"
 import type { ErrorLensConfig } from "../config/config-model.js"
-import { loadConfig, resolveConfigRelative } from "../config/load-config.js"
+import { loadConfig } from "../config/load-config.js"
 import { loadConfiguredAdapterRules } from "../core/adapter-loader.js"
+import {
+  createErrorLensSession,
+  disposeErrorLensSession,
+  registerSessionExitCleanup,
+  sessionTracePath,
+} from "../session/session-context.js"
 import { JsonlTraceStore } from "../trace/jsonl-store.js"
 import { handleCallToolRequest } from "./call-handler.js"
 import type { ProxyRegistry, ProxyRuntime, ToolMapping } from "./proxy-model.js"
@@ -70,22 +76,46 @@ async function buildProxyRegistryFromConfig(config: ErrorLensConfig): Promise<Pr
 }
 
 export async function startProxyServer(configPath: string): Promise<void> {
-  const config = await loadConfig(configPath)
-  const adapterRules = await loadConfiguredAdapterRules(configPath, config)
-  const registry = await buildProxyRegistryFromConfig(config)
-  const tracePath = resolveConfigRelative(configPath, config.trace.path)
-  const traceStore = new JsonlTraceStore(tracePath, config.trace.enabled)
-  const server = createProxyMcpServer({ config, registry, traceStore, adapterRules })
-  server.onclose = () => {
-    void closeUpstreamConnections(registry.connections).catch((error: unknown) => {
-      process.stderr.write(`ErrorLens upstream cleanup failed: ${summarizeCleanupError(error)}\n`)
+  const session = await createErrorLensSession()
+  const unregisterExitCleanup = registerSessionExitCleanup(session)
+  let registry: ProxyRegistry | undefined
+  let cleanedUp = false
+  const cleanup = async (): Promise<void> => {
+    if (cleanedUp) {
+      return
+    }
+    cleanedUp = true
+    unregisterExitCleanup()
+    process.stdin.removeListener("end", cleanupOnStdinEnd)
+    try {
+      if (registry !== undefined) {
+        await closeUpstreamConnections(registry.connections)
+      }
+    } finally {
+      await disposeErrorLensSession(session)
+    }
+  }
+  const cleanupOnStdinEnd = (): void => {
+    void cleanup().catch((error: unknown) => {
+      process.stderr.write(`ErrorLens session cleanup failed: ${summarizeCleanupError(error)}\n`)
     })
   }
-
+  process.stdin.once("end", cleanupOnStdinEnd)
   try {
+    const config = await loadConfig(configPath)
+    const adapterRules = await loadConfiguredAdapterRules(configPath, config)
+    registry = await buildProxyRegistryFromConfig(config)
+    const tracePath = sessionTracePath(session, config.trace.path)
+    const traceStore = new JsonlTraceStore(tracePath, config.trace.enabled)
+    const server = createProxyMcpServer({ config, registry, traceStore, adapterRules })
+    server.onclose = () => {
+      void cleanup().catch((error: unknown) => {
+        process.stderr.write(`ErrorLens session cleanup failed: ${summarizeCleanupError(error)}\n`)
+      })
+    }
     await server.connect(new StdioServerTransport())
   } catch (error) {
-    await closeUpstreamConnections(registry.connections)
+    await cleanup()
     throw error
   }
 }
