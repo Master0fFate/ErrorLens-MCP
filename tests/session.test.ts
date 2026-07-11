@@ -20,7 +20,7 @@ test("sessions use independent OS-temp trace roots and clean up safely", async (
       const relativeToWorkspace = relative(resolve(process.cwd()), session.tracePath)
       assert.equal(isAbsolute(session.tracePath), true)
       assert.equal(relativeToTemp.startsWith(".."), false)
-      assert.equal(relativeToWorkspace.startsWith(".."), true)
+      assert.equal(isAbsolute(relativeToWorkspace) || relativeToWorkspace.startsWith(".."), true)
       assert.equal(basename(sessionTracePath(session, ".errorlens/traces.jsonl")), "traces.jsonl")
     }
   } finally {
