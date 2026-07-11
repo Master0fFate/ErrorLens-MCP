@@ -73,7 +73,6 @@ export type ClassifyErrorInput = z.infer<typeof ClassifyErrorInputSchema>
 
 export const RecommendRecoveryInputSchema = z.object({
   structured_error: StructuredErrorSchema,
-  current_task_goal: z.string().optional(),
   available_alternative_tools: z.array(z.string()).default([]),
 })
 
@@ -84,6 +83,7 @@ export type RecoveryRecommendation = {
   readonly safe_to_retry: boolean
   readonly requires_user_input: boolean
   readonly stop_condition: string
+  readonly suggested_alternative_tools: readonly string[]
 }
 
 export function createTraceId(): string {

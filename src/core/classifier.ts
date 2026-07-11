@@ -1,4 +1,5 @@
 import type { AdapterRule } from "./adapters.js"
+import { unknownFailure } from "./builtin-classifications.js"
 import type { ClassificationSpec, MessageFacts } from "./classification-spec.js"
 import { classifyByHeuristics } from "./heuristic-rules.js"
 import { redactText, redactUnknown } from "./redaction.js"
@@ -13,11 +14,14 @@ import {
 export function classifyError(
   input: ClassifyErrorInput,
   adapterRules: readonly AdapterRule[] = [],
+  useBuiltinClassifications = true,
 ): StructuredError {
   const safeInput = sanitizeClassifyInput(input)
   const facts = extractFacts(safeInput)
   const adapterSpec = matchAdapterRule(safeInput, facts, adapterRules)
-  const spec = adapterSpec ?? classifyByHeuristics(safeInput, facts)
+  const spec =
+    adapterSpec ??
+    (useBuiltinClassifications ? classifyByHeuristics(safeInput, facts) : unknownFailure())
   const error: ErrorDetails = {
     code: spec.code,
     layer: spec.layer,

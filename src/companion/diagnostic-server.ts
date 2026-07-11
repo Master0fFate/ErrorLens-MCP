@@ -51,7 +51,6 @@ function registerClassificationTools(server: McpServer): void {
       description: "Turn a structured ErrorLens error into short agent next steps.",
       inputSchema: {
         structured_error: z.unknown(),
-        current_task_goal: z.string().optional(),
         available_alternative_tools: z.array(z.string()).optional(),
       },
     },

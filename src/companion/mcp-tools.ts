@@ -46,7 +46,7 @@ export function classifyErrorTool(input: unknown) {
 
 export function recommendRecoveryTool(input: unknown) {
   const parsed = RecommendRecoveryInputSchema.parse(input)
-  return jsonToolResult(recommendRecovery(parsed.structured_error))
+  return jsonToolResult(recommendRecovery(parsed.structured_error, parsed))
 }
 
 export async function replayTraceTool(input: unknown) {

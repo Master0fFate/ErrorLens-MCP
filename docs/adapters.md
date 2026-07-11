@@ -36,3 +36,24 @@ Run:
 ```sh
 node dist/cli/index.js rules test --file ./rules/github.yaml
 ```
+
+Load rules into proxy classification with paths relative to the ErrorLens config:
+
+```yaml
+version: 1
+rules:
+  custom_paths: []
+
+servers:
+  github:
+    transport: streamable_http
+    url: https://example.com/mcp
+    headers:
+      Authorization: ${GITHUB_AUTH_HEADER}
+    adapter_rules:
+      - rules/github.yaml
+```
+
+Global `rules.custom_paths` and each server's `adapter_rules` are loaded before
+the proxy connects. A missing or invalid rule file fails startup instead of
+silently leaving the proxy on generic heuristics.

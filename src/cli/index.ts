@@ -2,7 +2,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import { Command } from "commander"
-import { loadConfig, writeDefaultConfig } from "../config/load-config.js"
+import { loadConfig, resolveConfigRelative, writeDefaultConfig } from "../config/load-config.js"
 import { parseAdapterRules } from "../core/adapters.js"
 import { startProxyServer } from "../proxy/proxy-server.js"
 import { JsonlTraceStore } from "../trace/jsonl-store.js"
@@ -31,7 +31,7 @@ program
   .action(async (options: { readonly config: string }) => {
     const configPath = resolve(options.config)
     const config = await loadConfig(configPath)
-    const tracePath = resolve(config.trace.path)
+    const tracePath = resolveConfigRelative(configPath, config.trace.path)
     await mkdir(dirname(tracePath), { recursive: true })
     await writeFile(tracePath, "", { flag: "a", encoding: "utf8" })
     const commandChecks = await Promise.all(
@@ -40,8 +40,9 @@ program
           return {
             server: serverName,
             transport: serverConfig.transport,
-            command_available: false,
-            note: "streamable_http is configured but not supported by MVP proxy mode",
+            command_available: null,
+            endpoint_configured: true,
+            note: "",
           }
         }
         return {
@@ -51,6 +52,7 @@ program
             ...process.env,
             ...serverConfig.env,
           }),
+          endpoint_configured: true,
           note: "",
         }
       }),
@@ -58,7 +60,11 @@ program
     console.log(
       JSON.stringify(
         {
-          ok: commandChecks.every((check) => check.note.length === 0 && check.command_available),
+          ok: commandChecks.every((check) =>
+            check.transport === "streamable_http"
+              ? check.endpoint_configured
+              : check.command_available,
+          ),
           config: configPath,
           trace_path: tracePath,
           servers: commandChecks,
