@@ -2,17 +2,15 @@ import {
   type CallToolRequest,
   type CallToolResult,
   CallToolResultSchema,
+  ErrorCode,
+  McpError,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js"
-import type { ErrorLensConfig } from "../config/config-model.js"
 import { createTraceId } from "../core/structured-error-model.js"
 import type { SideEffectType } from "../core/taxonomy.js"
+import type { TraceRecord } from "../trace/trace-model.js"
 import type { ProxyRuntime, UpstreamCallContext } from "./proxy-model.js"
 import { successTrace, wrapFailure } from "./result-wrapper.js"
-
-type TimeoutMarker = {
-  readonly kind: "timeout"
-}
 
 type FailureRecordInput = {
   readonly serverName: string
@@ -32,7 +30,7 @@ export async function handleCallToolRequest(
   const mapping = runtime.registry.mappings.get(request.params.name)
   const argumentsValue = request.params.arguments ?? {}
   if (mapping === undefined) {
-    return toolNotFoundResult(runtime.config, request.params.name, argumentsValue)
+    throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${request.params.name}`)
   }
 
   const callContext: UpstreamCallContext = {
@@ -44,68 +42,44 @@ export async function handleCallToolRequest(
   try {
     return await callUpstream(runtime, callContext)
   } catch (error) {
+    const timedOut = isRequestTimeout(error)
     return appendFailure(runtime, {
       ...failureBase(callContext),
-      rawError: error,
+      rawError: timedOut ? `Timed out after ${runtime.config.proxy.default_timeout_ms} ms` : error,
       rawResult: null,
       durationMs: Date.now() - callContext.startedAt,
-      timedOut: false,
+      timedOut,
     })
   }
-}
-
-function toolNotFoundResult(
-  config: ErrorLensConfig,
-  toolName: string,
-  argumentsValue: unknown,
-): CallToolResult {
-  return wrapFailure({
-    serverName: "errorlens",
-    toolName,
-    argumentsValue,
-    rawError: `Tool not found: ${toolName}`,
-    rawResult: null,
-    durationMs: 0,
-    sideEffectType: "unknown",
-    timedOut: false,
-    redactSecrets: config.trace.redact_secrets,
-  }).result
 }
 
 async function callUpstream(
   runtime: ProxyRuntime,
   callContext: UpstreamCallContext,
 ): Promise<CallToolResult> {
-  const pending = callContext.mapping.connection.client.callTool({
-    name: callContext.mapping.upstreamName,
-    arguments: callContext.argumentsValue,
-  })
-  const outcome = await withTimeout(pending, runtime.config.proxy.default_timeout_ms)
+  const result = await callContext.mapping.connection.client.callTool(
+    {
+      name: callContext.mapping.upstreamName,
+      arguments: callContext.argumentsValue,
+    },
+    undefined,
+    { timeout: runtime.config.proxy.default_timeout_ms },
+  )
   const durationMs = Date.now() - callContext.startedAt
 
-  if (isTimeout(outcome)) {
-    return appendFailure(runtime, {
-      ...failureBase(callContext),
-      rawError: `Timed out after ${runtime.config.proxy.default_timeout_ms} ms`,
-      rawResult: null,
-      durationMs,
-      timedOut: true,
-    })
-  }
-
-  const result = CallToolResultSchema.parse(outcome)
-  if (result.isError === true) {
+  const parsedResult = CallToolResultSchema.parse(result)
+  if (parsedResult.isError === true) {
     return appendFailure(runtime, {
       ...failureBase(callContext),
       rawError: null,
-      rawResult: result,
+      rawResult: parsedResult,
       durationMs,
       timedOut: false,
     })
   }
 
   await appendSuccess(runtime, callContext, durationMs)
-  return trimResult(result, runtime.config.proxy.max_result_chars)
+  return trimResult(parsedResult, runtime.config.proxy.max_result_chars)
 }
 
 function failureBase(
@@ -125,9 +99,11 @@ async function appendFailure(
 ): Promise<CallToolResult> {
   const wrapped = wrapFailure({
     ...input,
+    adapterRules: runtime.adapterRules,
+    loadBuiltin: runtime.config.rules.load_builtin,
     redactSecrets: runtime.config.trace.redact_secrets,
   })
-  await runtime.traceStore.append(wrapped.trace)
+  await appendTrace(runtime, wrapped.trace)
   return wrapped.result
 }
 
@@ -136,7 +112,8 @@ async function appendSuccess(
   callContext: UpstreamCallContext,
   durationMs: number,
 ): Promise<void> {
-  await runtime.traceStore.append(
+  await appendTrace(
+    runtime,
     successTrace({
       traceId: createTraceId(),
       serverName: callContext.mapping.serverName,
@@ -146,6 +123,18 @@ async function appendSuccess(
       redactSecrets: runtime.config.trace.redact_secrets,
     }),
   )
+}
+
+async function appendTrace(runtime: ProxyRuntime, record: TraceRecord): Promise<void> {
+  try {
+    await runtime.traceStore.append(record)
+  } catch (error) {
+    console.error(`ErrorLens trace write failed: ${summarizeTraceError(error)}`)
+  }
+}
+
+function summarizeTraceError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function inferSideEffect(tool: Tool): SideEffectType {
@@ -171,24 +160,13 @@ function containsToolVerb(toolName: string, verbs: readonly string[]): boolean {
   return verbs.some((verb) => toolName.includes(verb))
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | TimeoutMarker> {
-  let timer: NodeJS.Timeout | undefined
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<TimeoutMarker>((resolve) => {
-        timer = setTimeout(() => resolve({ kind: "timeout" }), timeoutMs)
-      }),
-    ])
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer)
-    }
-  }
-}
-
-function isTimeout(value: unknown): value is TimeoutMarker {
-  return typeof value === "object" && value !== null && "kind" in value && value.kind === "timeout"
+function isRequestTimeout(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === ErrorCode.RequestTimeout
+  )
 }
 
 function trimResult(result: CallToolResult, maxChars: number): CallToolResult {

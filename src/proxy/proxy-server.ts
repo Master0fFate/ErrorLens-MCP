@@ -7,33 +7,41 @@ import {
   ListToolsRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js"
-import { loadConfig } from "../config/load-config.js"
+import type { ErrorLensConfig } from "../config/config-model.js"
+import { loadConfig, resolveConfigRelative } from "../config/load-config.js"
+import { loadConfiguredAdapterRules } from "../core/adapter-loader.js"
 import { JsonlTraceStore } from "../trace/jsonl-store.js"
 import { handleCallToolRequest } from "./call-handler.js"
 import type { ProxyRegistry, ProxyRuntime, ToolMapping } from "./proxy-model.js"
 import {
   closeUpstreamConnections,
-  connectStdioUpstream,
+  connectUpstream,
   type UpstreamConnection,
 } from "./upstream-client.js"
 
 export async function buildProxyRegistry(configPath: string): Promise<ProxyRegistry> {
   const config = await loadConfig(configPath)
+  return buildProxyRegistryFromConfig(config)
+}
+
+async function buildProxyRegistryFromConfig(config: ErrorLensConfig): Promise<ProxyRegistry> {
   const exposedTools: Tool[] = []
   const mappings = new Map<string, ToolMapping>()
   const connections: UpstreamConnection[] = []
 
   try {
     for (const [serverName, serverConfig] of Object.entries(config.servers)) {
-      if (serverConfig.transport !== "stdio") {
-        continue
-      }
-      const connection = await connectStdioUpstream(serverName, serverConfig)
+      const connection = await connectUpstream(serverName, serverConfig)
       connections.push(connection)
       for (const tool of connection.tools) {
         const exposedName = config.proxy.expose_tool_prefix
           ? `${serverName}__${tool.name}`
           : tool.name
+        if (mappings.has(exposedName)) {
+          throw new Error(
+            `Duplicate exposed tool name "${exposedName}". Enable proxy.expose_tool_prefix to disambiguate upstream tools.`,
+          )
+        }
         const exposedTool: Tool = {
           ...tool,
           name: exposedName,
@@ -63,9 +71,11 @@ export async function buildProxyRegistry(configPath: string): Promise<ProxyRegis
 
 export async function startProxyServer(configPath: string): Promise<void> {
   const config = await loadConfig(configPath)
-  const registry = await buildProxyRegistry(configPath)
-  const traceStore = new JsonlTraceStore(config.trace.path, config.trace.enabled)
-  const server = createProxyMcpServer({ config, registry, traceStore })
+  const adapterRules = await loadConfiguredAdapterRules(configPath, config)
+  const registry = await buildProxyRegistryFromConfig(config)
+  const tracePath = resolveConfigRelative(configPath, config.trace.path)
+  const traceStore = new JsonlTraceStore(tracePath, config.trace.enabled)
+  const server = createProxyMcpServer({ config, registry, traceStore, adapterRules })
   server.onclose = () => {
     void closeUpstreamConnections(registry.connections).catch((error: unknown) => {
       process.stderr.write(`ErrorLens upstream cleanup failed: ${summarizeCleanupError(error)}\n`)
@@ -91,7 +101,7 @@ function createProxyMcpServer(runtime: ProxyRuntime): Server {
         tools: {},
       },
       instructions:
-        "ErrorLens proxies upstream MCP tools and returns structured recovery errors for failures.",
+        "ErrorLens proxies upstream MCP tools, applies configured adapter rules, and returns structured recovery errors for failures.",
     },
   )
 

@@ -28,7 +28,7 @@ ErrorLens MCP is built for that pressure point:
 - Tells agents whether retrying is safe, whether state may have changed, and what
   to do next.
 - Exposes a companion MCP server for diagnostics.
-- Runs as a stdio MCP proxy for existing stdio upstream servers.
+- Runs as an MCP proxy for local stdio and remote Streamable HTTP upstream servers.
 - Records local JSONL traces with redaction enabled by default.
 - Ships a CLI for init, doctor, traces, replay, report, proxy, and adapter rule tests.
 
@@ -133,9 +133,28 @@ Edit `.errorlens/config.yaml`, then run:
 errorlens proxy --config .errorlens/config.yaml
 ```
 
-For stdio upstreams, ErrorLens lists the upstream tools and forwards calls. Tool
-execution failures are returned as normal MCP tool results with `isError: true`
-and a structured ErrorLens JSON payload. Successful tool responses are preserved.
+ErrorLens lists upstream tools and forwards calls over stdio or Streamable HTTP.
+Tool execution failures are returned as normal MCP tool results with `isError: true`,
+machine-readable `structuredContent`, and a structured ErrorLens JSON payload.
+Successful tool responses are preserved. Unknown exposed tools remain protocol errors,
+as required by MCP.
+
+Relative trace and adapter-rule paths are resolved against the config file. Adapter
+rules can be loaded globally or per upstream server:
+
+```yaml
+rules:
+  custom_paths: []
+
+servers:
+  github:
+    transport: streamable_http
+    url: https://example.com/mcp
+    headers:
+      Authorization: ${GITHUB_AUTH_HEADER}
+    adapter_rules:
+      - rules/github.yaml
+```
 
 ## CLI Commands
 
@@ -145,7 +164,7 @@ errorlens doctor --config .errorlens/config.yaml
 errorlens report --trace .errorlens/traces.jsonl
 errorlens replay --trace .errorlens/traces.jsonl
 errorlens traces --trace .errorlens/traces.jsonl
-errorlens rules test --config .errorlens/config.yaml
+errorlens rules test --file ./rules/github.yaml
 errorlens proxy --config .errorlens/config.yaml
 ```
 
@@ -157,6 +176,7 @@ The repo includes a fake broken MCP server used by the QA smoke tests:
 npm run verify
 node dist/qa/companion-smoke.js rate-limit
 node dist/qa/proxy-smoke.js write-timeout
+node dist/qa/proxy-smoke.js adapter-rule
 ```
 
 The proxy demo shows a write-like timeout classified as `SIDE_EFFECT_UNKNOWN`

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { parseAdapterRules } from "../src/core/adapters.js"
 import { wrapFailure } from "../src/proxy/result-wrapper.js"
 import { firstText } from "../src/shared/tool-result.js"
 
@@ -56,4 +57,48 @@ test("wrapFailure redacts raw upstream tool results from structured evidence", (
   assert.equal(traceText.includes(fakeSecret), false)
   assert.match(resultText, /\[REDACTED\]/u)
   assert.match(traceText, /\[REDACTED\]/u)
+})
+
+test("wrapFailure applies configured adapter rules", () => {
+  const adapterRules = parseAdapterRules(`
+server: demo
+rules:
+  - name: provider-quota
+    match:
+      status: 498
+      message_regex: "quota reached"
+    classify:
+      code: RATE_LIMITED
+      layer: rate_limit
+      category: rate_limit
+      permanence: transient
+      retry:
+        safe: true
+        after_ms: 45000
+        max_attempts: 1
+        backoff: fixed
+        requires_idempotency_key: false
+        same_arguments_required: true
+      state_impact: none
+      user_action_required: false
+      agent_next_steps:
+        - Wait before retrying.
+      do_not:
+        - Do not retry rapidly.
+`)
+  const wrapped = wrapFailure({
+    serverName: "demo",
+    toolName: "search",
+    argumentsValue: {},
+    rawError: "HTTP 498 quota reached",
+    rawResult: null,
+    durationMs: 25,
+    sideEffectType: "read",
+    timedOut: false,
+    redactSecrets: true,
+    adapterRules,
+  })
+
+  assert.equal(wrapped.structured.error.code, "RATE_LIMITED")
+  assert.equal(wrapped.structured.error.retry.after_ms, 45000)
 })

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { generateAdapterRuleTool } from "../src/companion/mcp-tools.js"
-import { firstText } from "../src/shared/tool-result.js"
+import { firstText, jsonToolResult } from "../src/shared/tool-result.js"
 
 test("generateAdapterRuleTool redacts secrets before building message regex", () => {
   const bearerToken = ["Bearer", "abcd1234efgh5678ijkl9012"].join(" ")
@@ -21,4 +21,11 @@ test("generateAdapterRuleTool redacts secrets before building message regex", ()
   assert.equal(resultText.includes("hunter2"), false)
   assert.equal(resultText.includes(providerToken), false)
   assert.match(resultText, /\[REDACTED\]/u)
+})
+
+test("jsonToolResult exposes object diagnostics through structuredContent", () => {
+  const result = jsonToolResult({ ok: false, code: "RATE_LIMITED" }, true)
+
+  assert.deepEqual(result.structuredContent, { ok: false, code: "RATE_LIMITED" })
+  assert.equal(result.isError, true)
 })

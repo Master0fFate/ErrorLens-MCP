@@ -1,12 +1,35 @@
-import type { RecoveryRecommendation, StructuredError } from "./structured-error-model.js"
+import type {
+  RecommendRecoveryInput,
+  RecoveryRecommendation,
+  StructuredError,
+} from "./structured-error-model.js"
 
-export function recommendRecovery(error: StructuredError): RecoveryRecommendation {
+export function recommendRecovery(
+  error: StructuredError,
+  context?: Pick<RecommendRecoveryInput, "available_alternative_tools">,
+): RecoveryRecommendation {
   return {
     next_steps: error.error.agent_next_steps,
     safe_to_retry: error.error.retry.safe,
     requires_user_input: error.error.user_action_required,
     stop_condition: stopConditionFor(error),
+    suggested_alternative_tools: suggestedReadTools(error, context?.available_alternative_tools),
   }
+}
+
+function suggestedReadTools(
+  error: StructuredError,
+  availableTools: readonly string[] | undefined,
+): readonly string[] {
+  if (
+    error.error.code !== "SIDE_EFFECT_UNKNOWN" &&
+    error.error.code !== "POSSIBLE_DUPLICATE_SIDE_EFFECT"
+  ) {
+    return []
+  }
+  const readToolPattern =
+    /(?:^|[_-])(get|list|search|find|read|status|inspect|check|verify|lookup|fetch)(?:[_-]|$)/iu
+  return (availableTools ?? []).filter((toolName) => readToolPattern.test(toolName)).slice(0, 3)
 }
 
 function stopConditionFor(error: StructuredError): string {

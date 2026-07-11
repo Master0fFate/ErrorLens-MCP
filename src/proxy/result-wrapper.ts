@@ -1,4 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
+import type { AdapterRule } from "../core/adapters.js"
 import { classifyError, summarizeUnknown } from "../core/classifier.js"
 import { redactText, redactUnknown } from "../core/redaction.js"
 import type { ClassifyErrorInput, StructuredError } from "../core/structured-error-model.js"
@@ -16,6 +17,8 @@ export type ToolFailureContext = {
   readonly sideEffectType: SideEffectType
   readonly timedOut: boolean
   readonly redactSecrets: boolean
+  readonly adapterRules?: readonly AdapterRule[]
+  readonly loadBuiltin?: boolean
 }
 
 export function wrapFailure(context: ToolFailureContext): {
@@ -42,7 +45,11 @@ export function wrapFailure(context: ToolFailureContext): {
     tool_side_effect_type: context.sideEffectType,
     timed_out: context.timedOut,
   }
-  const structured = classifyError(classificationInput)
+  const structured = classifyError(
+    classificationInput,
+    context.adapterRules,
+    context.loadBuiltin ?? true,
+  )
   const trace: TraceRecord = {
     trace_id: structured.trace_id,
     timestamp: new Date().toISOString(),

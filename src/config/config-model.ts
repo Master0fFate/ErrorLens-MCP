@@ -12,6 +12,7 @@ const ServerConfigSchema = z.discriminatedUnion("transport", [
   z.object({
     transport: z.literal("streamable_http"),
     url: z.string().url(),
+    headers: z.record(z.string(), z.string()).default({}),
     adapter_rules: z.array(z.string()).default([]),
   }),
 ])
@@ -71,6 +72,10 @@ export const ErrorLensConfigSchema = z.object({
 export type ErrorLensConfig = z.infer<typeof ErrorLensConfigSchema>
 export type ServerConfig = ErrorLensConfig["servers"][string]
 export type StdioServerConfig = Extract<ServerConfig, { readonly transport: "stdio" }>
+export type StreamableHttpServerConfig = Extract<
+  ServerConfig,
+  { readonly transport: "streamable_http" }
+>
 
 export function defaultConfig(tracePath = ".errorlens/traces.jsonl"): ErrorLensConfig {
   return {

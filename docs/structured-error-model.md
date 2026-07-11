@@ -37,4 +37,6 @@ ErrorLens returns compact JSON that is safe to put back into an agent context.
 ```
 
 Tool execution failures are surfaced as MCP tool results with `isError: true`.
-Protocol-level issues remain JSON-RPC protocol errors.
+ErrorLens also places the same object in `structuredContent` so MCP clients can
+consume the diagnosis without reparsing display text. Protocol-level issues,
+such as unknown tools, remain JSON-RPC protocol errors.

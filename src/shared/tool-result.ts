@@ -1,6 +1,7 @@
 import { type CallToolResult, CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js"
 
 export function jsonToolResult(value: unknown, isError = false): CallToolResult {
+  const structuredContent = asStructuredContent(value)
   return {
     content: [
       {
@@ -9,7 +10,14 @@ export function jsonToolResult(value: unknown, isError = false): CallToolResult 
       },
     ],
     isError,
+    ...(structuredContent === null ? {} : { structuredContent }),
   }
+}
+
+function asStructuredContent(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
 }
 
 export function parseToolResult(value: unknown): CallToolResult {

@@ -94,3 +94,21 @@ test("classifyError redacts diagnostic evidence before returning structured outp
   assert.equal(serialized.includes(providerToken), false)
   assert.match(result.error.evidence.matched_text, /\[REDACTED\]/u)
 })
+
+test("classifyError can run with adapter rules only", () => {
+  const result = classifyError(
+    {
+      server_name: "demo",
+      tool_name: "search_docs",
+      raw_error: "HTTP 429 too many requests",
+      duration_ms: 10,
+      tool_side_effect_type: "read",
+      timed_out: false,
+      http_status: 429,
+    },
+    [],
+    false,
+  )
+
+  assert.equal(result.error.code, "UNKNOWN_FAILURE")
+})
