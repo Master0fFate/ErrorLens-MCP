@@ -40,3 +40,7 @@ Tool execution failures are surfaced as MCP tool results with `isError: true`.
 ErrorLens also places the same object in `structuredContent` so MCP clients can
 consume the diagnosis without reparsing display text. Protocol-level issues,
 such as unknown tools, remain JSON-RPC protocol errors.
+
+Trace storage is session-scoped: each running ErrorLens server receives a unique
+directory under the operating system temp directory, and that directory is removed
+on graceful shutdown. Abandoned roots are never reused by a later session.

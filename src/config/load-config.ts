@@ -14,11 +14,9 @@ export async function loadConfig(configPath: string): Promise<ErrorLensConfig> {
 export async function writeDefaultConfig(targetDir: string): Promise<string> {
   await mkdir(targetDir, { recursive: true })
   await mkdir(resolve(targetDir, "rules"), { recursive: true })
-  const tracePath = resolve(targetDir, "traces.jsonl")
   const configPath = resolve(targetDir, "config.yaml")
-  const config = defaultConfig(tracePath)
+  const config = defaultConfig()
   await writeFile(configPath, stringifyYaml(config), "utf8")
-  await writeFile(tracePath, "", { flag: "a", encoding: "utf8" })
   return configPath
 }
 

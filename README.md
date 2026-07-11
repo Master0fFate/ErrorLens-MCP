@@ -30,6 +30,7 @@ ErrorLens MCP is built for that pressure point:
 - Exposes a companion MCP server for diagnostics.
 - Runs as an MCP proxy for local stdio and remote Streamable HTTP upstream servers.
 - Records local JSONL traces with redaction enabled by default.
+- Keeps trace data in a per-session OS temp directory and cleans it up on graceful server shutdown.
 - Ships a CLI for init, doctor, traces, replay, report, proxy, and adapter rule tests.
 
 ErrorLens is a reliability layer, not a security sandbox. It does not send traces
@@ -138,6 +139,10 @@ Tool execution failures are returned as normal MCP tool results with `isError: t
 machine-readable `structuredContent`, and a structured ErrorLens JSON payload.
 Successful tool responses are preserved. Unknown exposed tools remain protocol errors,
 as required by MCP.
+
+Runtime trace files are session-scoped and live under the operating system's temp
+directory; the proxy and companion server do not write trace data into the working
+directory. `errorlens init` only creates the user-requested configuration directory.
 
 Relative trace and adapter-rule paths are resolved against the config file. Adapter
 rules can be loaded globally or per upstream server:

@@ -15,11 +15,11 @@ import { summarizeFailures } from "../trace/report.js"
 
 export const ReplayTraceInputSchema = z.object({
   trace_id: z.string().min(1),
-  trace_path: z.string().default(".errorlens/traces.jsonl"),
+  trace_path: z.string().min(1).optional(),
 })
 
 export const SummarizeFailuresInputSchema = z.object({
-  trace_path: z.string().default(".errorlens/traces.jsonl"),
+  trace_path: z.string().min(1).optional(),
   server_name: z.string().optional(),
   tool_name: z.string().optional(),
 })
@@ -49,9 +49,9 @@ export function recommendRecoveryTool(input: unknown) {
   return jsonToolResult(recommendRecovery(parsed.structured_error, parsed))
 }
 
-export async function replayTraceTool(input: unknown) {
+export async function replayTraceTool(input: unknown, defaultTracePath?: string) {
   const parsed = ReplayTraceInputSchema.parse(input)
-  const store = new JsonlTraceStore(parsed.trace_path, true)
+  const store = new JsonlTraceStore(requireTracePath(parsed.trace_path ?? defaultTracePath), true)
   const record = await store.find(parsed.trace_id)
   return jsonToolResult({
     found: record !== null,
@@ -59,9 +59,9 @@ export async function replayTraceTool(input: unknown) {
   })
 }
 
-export async function summarizeFailuresTool(input: unknown) {
+export async function summarizeFailuresTool(input: unknown, defaultTracePath?: string) {
   const parsed = SummarizeFailuresInputSchema.parse(input)
-  const store = new JsonlTraceStore(parsed.trace_path, true)
+  const store = new JsonlTraceStore(requireTracePath(parsed.trace_path ?? defaultTracePath), true)
   const records = (await store.readAll()).filter((record) => {
     const serverMatches =
       parsed.server_name === undefined || record.server_name === parsed.server_name
@@ -118,4 +118,11 @@ function escapeRegexSample(value: string): string {
     .slice(0, 5)
     .map((part) => part.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"))
     .join(".*")
+}
+
+function requireTracePath(tracePath: string | undefined): string {
+  if (tracePath === undefined) {
+    throw new Error("No session trace path is available; pass trace_path explicitly.")
+  }
+  return tracePath
 }

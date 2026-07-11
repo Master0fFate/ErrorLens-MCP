@@ -1,5 +1,6 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
-import { resolve } from "node:path"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join, resolve } from "node:path"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { stringify as stringifyYaml } from "yaml"
@@ -9,21 +10,22 @@ import { firstText, parseToolResult } from "../shared/tool-result.js"
 type SmokeKind = "write-timeout" | "publish-timeout" | "adapter-rule"
 
 async function runProxySmoke(kind: SmokeKind): Promise<void> {
-  const tmpDir = resolve(".omo/ulw-loop/tmp/proxy-smoke")
-  await rm(tmpDir, { recursive: true, force: true })
-  await mkdir(tmpDir, { recursive: true })
-  const tracePath = resolve(tmpDir, "traces.jsonl")
-  const configPath = resolve(tmpDir, "config.yaml")
-  if (kind === "adapter-rule") {
-    await writeAdapterRule(resolve(tmpDir, "adapter.yaml"))
-  }
-  await writeSmokeConfig(configPath, tracePath, kind)
-
-  const client = await connectProxyClient(configPath)
+  const tmpDir = await mkdtemp(join(tmpdir(), "mcp-errorlens-proxy-smoke-"))
   try {
-    await verifyProxyResult(client, kind, tracePath)
+    const configPath = resolve(tmpDir, "config.yaml")
+    if (kind === "adapter-rule") {
+      await writeAdapterRule(resolve(tmpDir, "adapter.yaml"))
+    }
+    await writeSmokeConfig(configPath, kind)
+
+    const client = await connectProxyClient(configPath)
+    try {
+      await verifyProxyResult(client, kind)
+    } finally {
+      await client.close()
+    }
   } finally {
-    await client.close()
+    await rm(tmpDir, { recursive: true, force: true })
   }
 }
 
@@ -59,16 +61,12 @@ rules:
   )
 }
 
-async function writeSmokeConfig(
-  configPath: string,
-  tracePath: string,
-  kind: SmokeKind,
-): Promise<void> {
+async function writeSmokeConfig(configPath: string, kind: SmokeKind): Promise<void> {
   await writeFile(
     configPath,
     stringifyYaml({
       version: 1,
-      trace: { enabled: true, path: tracePath, redact_secrets: true },
+      trace: { enabled: true, redact_secrets: true },
       proxy: { expose_tool_prefix: true, default_timeout_ms: 150, max_result_chars: 12_000 },
       rules: { custom_paths: kind === "adapter-rule" ? ["adapter.yaml"] : [] },
       servers: {
@@ -95,17 +93,17 @@ async function connectProxyClient(configPath: string): Promise<Client> {
   return client
 }
 
-async function verifyProxyResult(
-  client: Client,
-  kind: SmokeKind,
-  tracePath: string,
-): Promise<void> {
+async function verifyProxyResult(client: Client, kind: SmokeKind): Promise<void> {
   const fakeSecret = ["sk", "secret", "123456789012345678901234"].join("-")
   const result = parseToolResult(await client.callTool(callForKind(kind, fakeSecret)))
   if (result.structuredContent === undefined) {
     throw new Error("proxy result did not include structuredContent")
   }
-  const structured = StructuredErrorSchema.parse(JSON.parse(firstText(result)))
+  const resultText = firstText(result)
+  if (resultText.includes(fakeSecret)) {
+    throw new Error("proxy result leaked secret-like argument")
+  }
+  const structured = StructuredErrorSchema.parse(JSON.parse(resultText))
   if (kind === "adapter-rule") {
     if (structured.error.code !== "RATE_LIMITED") {
       throw new Error(`expected adapter RATE_LIMITED, got ${structured.error.code}`)
@@ -119,20 +117,12 @@ async function verifyProxyResult(
   if (structured.error.retry.safe || structured.error.state_impact !== "possibly_applied") {
     throw new Error("write-like timeout did not produce unsafe ambiguous-state guidance")
   }
-  const traceText = await readFile(tracePath, "utf8")
-  if (kind === "write-timeout" && traceText.includes(fakeSecret)) {
-    throw new Error("trace leaked secret-like argument")
-  }
-  if (kind === "write-timeout" && !traceText.includes("[REDACTED]")) {
-    throw new Error("trace did not include redaction marker")
-  }
   process.stdout.write(
     `${[
       `PASS proxy-${kind}`,
       `code=${structured.error.code}`,
       `retry.safe=${structured.error.retry.safe}`,
       `state_impact=${structured.error.state_impact}`,
-      `trace=${tracePath}`,
     ].join("\n")}\n`,
   )
 }

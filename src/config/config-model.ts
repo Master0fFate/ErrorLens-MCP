@@ -22,12 +22,11 @@ export const ErrorLensConfigSchema = z.object({
   trace: z
     .object({
       enabled: z.boolean().default(true),
-      path: z.string().default(".errorlens/traces.jsonl"),
+      path: z.string().min(1).optional(),
       redact_secrets: z.boolean().default(true),
     })
     .default({
       enabled: true,
-      path: ".errorlens/traces.jsonl",
       redact_secrets: true,
     }),
   proxy: z
@@ -77,12 +76,11 @@ export type StreamableHttpServerConfig = Extract<
   { readonly transport: "streamable_http" }
 >
 
-export function defaultConfig(tracePath = ".errorlens/traces.jsonl"): ErrorLensConfig {
+export function defaultConfig(): ErrorLensConfig {
   return {
     version: 1,
     trace: {
       enabled: true,
-      path: tracePath,
       redact_secrets: true,
     },
     proxy: {

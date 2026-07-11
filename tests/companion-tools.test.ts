@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
+import { access } from "node:fs/promises"
 import test from "node:test"
-import { generateAdapterRuleTool } from "../src/companion/mcp-tools.js"
+import { generateAdapterRuleTool, summarizeFailuresTool } from "../src/companion/mcp-tools.js"
+import { createErrorLensSession, disposeErrorLensSession } from "../src/session/session-context.js"
 import { firstText, jsonToolResult } from "../src/shared/tool-result.js"
 
 test("generateAdapterRuleTool redacts secrets before building message regex", () => {
@@ -28,4 +30,23 @@ test("jsonToolResult exposes object diagnostics through structuredContent", () =
 
   assert.deepEqual(result.structuredContent, { ok: false, code: "RATE_LIMITED" })
   assert.equal(result.isError, true)
+})
+
+test("trace summaries use the injected session path instead of the workspace", async () => {
+  const session = await createErrorLensSession()
+  try {
+    const result = await summarizeFailuresTool({}, session.tracePath)
+    assert.deepEqual(result.structuredContent, {
+      total: 0,
+      failures: 0,
+      by_category: {},
+      by_server: {},
+      by_tool: {},
+      retry_safe: 0,
+      retry_unsafe: 0,
+    })
+  } finally {
+    await disposeErrorLensSession(session)
+  }
+  await assert.rejects(access(session.directory))
 })
