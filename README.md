@@ -285,3 +285,10 @@ npm run verify      # lint + build + test
 The CI workflow runs the verification suite and the smoke checks on Windows,
 Linux, and macOS with Node 22, 24 and 26. See [CHANGELOG.md](CHANGELOG.md) for
 release notes.
+
+### Releasing
+
+Bump `version` in `package.json` and `server.json`, add a `## [x.y.z]` section
+to `CHANGELOG.md`, and push to `main`. The Release workflow verifies the build,
+creates the `vx.y.z` tag, and publishes a GitHub release whose notes are that
+changelog section. Publishing to npm (`npm publish`) remains a manual step.

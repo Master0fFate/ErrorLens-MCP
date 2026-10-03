@@ -1,0 +1,89 @@
+name: Release
+
+# Publishes a GitHub release whenever the version in package.json has no
+# matching v<version> tag yet. Runs on every push to main (and on demand) and
+# exits early when the tag already exists, so it is safe to re-run.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Tag and release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (actions/checkout v6.1.0 pinned)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node (actions/setup-node v6.5.0 pinned)
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Resolve version
+        id: version
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag v$VERSION already exists; nothing to release."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify
+        if: steps.version.outputs.exists == 'false'
+        run: |
+          npm ci
+          npm run verify
+          npm run smoke
+
+      - name: Extract release notes
+        if: steps.version.outputs.exists == 'false'
+        run: |
+          awk -v ver="${{ steps.version.outputs.version }}" \
+            '$0 ~ "^## \\["ver"\\]" {flag=1; next} /^## \[/ {flag=0} flag' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No CHANGELOG section for ${{ steps.version.outputs.version }}; using a default body."
+            echo "ErrorLens MCP ${{ steps.version.outputs.version }}. See CHANGELOG.md." > release-notes.md
+          fi
+          {
+            echo "Install: \`npm install -g mcp-errorlens@${{ steps.version.outputs.version }}\` or \`npx -y mcp-errorlens client-config <client>\`."
+            echo
+            cat release-notes.md
+          } > release-body.md
+          cat release-body.md
+
+      - name: Tag
+        if: steps.version.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "ErrorLens MCP ${{ steps.version.outputs.version }}"
+          git push origin "refs/tags/${{ steps.version.outputs.tag }}"
+
+      - name: Create GitHub release
+        if: steps.version.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --notes-file release-body.md \
+            --latest
