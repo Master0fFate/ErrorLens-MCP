@@ -1,8 +1,9 @@
 {
   "name": "mcp-errorlens",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Structured error recovery for MCP agents.",
   "type": "module",
+  "mcpName": "io.github.master0ffate/errorlens",
   "homepage": "https://github.com/Master0fFate/ErrorLens-MCP#readme",
   "repository": {
     "type": "git",
@@ -17,18 +18,32 @@
     "errorlens-companion": "dist/companion/diagnostic-server.js",
     "errorlens-proxy": "dist/proxy/proxy-server.js"
   },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "docs",
     "examples",
+    "server.json",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p tsconfig.tests.json",
+    "clean": "node -e \"for (const dir of ['dist', 'dist-tests']) require('node:fs').rmSync(dir, { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.json && tsc -p tsconfig.tests.json",
+    "typecheck": "tsc -p tsconfig.tests.json --noEmit",
     "lint": "biome check .",
     "format": "biome check --write .",
     "test": "node --test \"dist-tests/tests/*.test.js\"",
+    "smoke": "node dist/qa/companion-smoke.js rate-limit && node dist/qa/companion-smoke.js rate-limit --transport http && node dist/qa/proxy-smoke.js write-timeout && node dist/qa/proxy-smoke.js publish-timeout && node dist/qa/proxy-smoke.js adapter-rule && node dist/qa/proxy-smoke.js write-timeout --transport http",
     "verify": "npm run lint && npm run build && npm test",
     "start:companion": "node dist/companion/diagnostic-server.js",
     "start:proxy": "node dist/proxy/proxy-server.js"
@@ -37,6 +52,8 @@
     "mcp",
     "model-context-protocol",
     "mcp-server",
+    "mcp-proxy",
+    "streamable-http",
     "errors",
     "error-handling",
     "recovery",
@@ -49,15 +66,18 @@
   "author": "Master0fFate",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/client": "2.3.0",
+    "@modelcontextprotocol/core": "2.3.0",
+    "@modelcontextprotocol/node": "2.1.1",
+    "@modelcontextprotocol/server": "2.3.0",
     "commander": "15.0.0",
-    "yaml": "2.9.0",
-    "zod": "4.4.3"
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.16",
-    "@types/node": "24.10.1",
-    "typescript": "6.0.3"
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "24.19.1",
+    "typescript": "7.0.2"
   },
   "engines": {
     "node": ">=22.12.0"

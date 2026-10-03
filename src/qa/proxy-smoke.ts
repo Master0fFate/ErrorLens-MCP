@@ -1,15 +1,20 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
-import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio"
 import { stringify as stringifyYaml } from "yaml"
 import { StructuredErrorSchema } from "../core/structured-error-model.js"
+import { packageInfo } from "../shared/package-info.js"
 import { firstText, parseToolResult } from "../shared/tool-result.js"
+import { type HttpChild, parseTransportFlag, spawnHttpChild } from "./http-child.js"
 
 type SmokeKind = "write-timeout" | "publish-timeout" | "adapter-rule"
+type SmokeTransport = "stdio" | "http"
 
-async function runProxySmoke(kind: SmokeKind): Promise<void> {
+const PROXY_BIN = "dist/proxy/proxy-server.js"
+
+async function runProxySmoke(kind: SmokeKind, transport: SmokeTransport): Promise<void> {
   const tmpDir = await mkdtemp(join(tmpdir(), "mcp-errorlens-proxy-smoke-"))
   try {
     const configPath = resolve(tmpDir, "config.yaml")
@@ -18,11 +23,12 @@ async function runProxySmoke(kind: SmokeKind): Promise<void> {
     }
     await writeSmokeConfig(configPath, kind)
 
-    const client = await connectProxyClient(configPath)
+    const { client, stop } = await connectProxyClient(configPath, transport)
     try {
-      await verifyProxyResult(client, kind)
+      await verifyProxyResult(client, kind, transport)
     } finally {
       await client.close()
+      await stop()
     }
   } finally {
     await rm(tmpDir, { recursive: true, force: true })
@@ -82,18 +88,31 @@ async function writeSmokeConfig(configPath: string, kind: SmokeKind): Promise<vo
   )
 }
 
-async function connectProxyClient(configPath: string): Promise<Client> {
-  const client = new Client({ name: "errorlens-proxy-smoke", version: "0.1.0" })
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: ["dist/proxy/proxy-server.js", "--config", configPath],
-    stderr: "pipe",
-  })
-  await client.connect(transport)
-  return client
+async function connectProxyClient(
+  configPath: string,
+  transport: SmokeTransport,
+): Promise<{ readonly client: Client; readonly stop: () => Promise<void> }> {
+  const client = new Client({ name: "errorlens-proxy-smoke", version: packageInfo().version })
+  if (transport === "http") {
+    const child: HttpChild = await spawnHttpChild([PROXY_BIN, "--config", configPath])
+    await client.connect(new StreamableHTTPClientTransport(new URL(child.url)))
+    return { client, stop: child.stop }
+  }
+  await client.connect(
+    new StdioClientTransport({
+      command: process.execPath,
+      args: [PROXY_BIN, "--config", configPath],
+      stderr: "pipe",
+    }),
+  )
+  return { client, stop: async () => undefined }
 }
 
-async function verifyProxyResult(client: Client, kind: SmokeKind): Promise<void> {
+async function verifyProxyResult(
+  client: Client,
+  kind: SmokeKind,
+  transport: SmokeTransport,
+): Promise<void> {
   const fakeSecret = ["sk", "secret", "123456789012345678901234"].join("-")
   const result = parseToolResult(await client.callTool(callForKind(kind, fakeSecret)))
   if (result.structuredContent === undefined) {
@@ -108,7 +127,9 @@ async function verifyProxyResult(client: Client, kind: SmokeKind): Promise<void>
     if (structured.error.code !== "RATE_LIMITED") {
       throw new Error(`expected adapter RATE_LIMITED, got ${structured.error.code}`)
     }
-    process.stdout.write("PASS proxy-adapter-rule\ncode=RATE_LIMITED\nstructuredContent=true\n")
+    process.stdout.write(
+      `PASS proxy-adapter-rule (${transport})\ncode=RATE_LIMITED\nstructuredContent=true\n`,
+    )
     return
   }
   if (structured.error.code !== "SIDE_EFFECT_UNKNOWN") {
@@ -119,7 +140,7 @@ async function verifyProxyResult(client: Client, kind: SmokeKind): Promise<void>
   }
   process.stdout.write(
     `${[
-      `PASS proxy-${kind}`,
+      `PASS proxy-${kind} (${transport})`,
       `code=${structured.error.code}`,
       `retry.safe=${structured.error.retry.safe}`,
       `state_impact=${structured.error.state_impact}`,
@@ -128,7 +149,7 @@ async function verifyProxyResult(client: Client, kind: SmokeKind): Promise<void>
 }
 
 function callForKind(
-  kind: string,
+  kind: SmokeKind,
   fakeSecret: string,
 ): { readonly name: string; readonly arguments: Record<string, string> } {
   if (kind === "publish-timeout") {
@@ -152,12 +173,12 @@ function callForKind(
   }
 }
 
-const kind = parseSmokeKind(process.argv[2] ?? "write-timeout")
-await runProxySmoke(kind)
-
 function parseSmokeKind(value: string): SmokeKind {
   if (value === "write-timeout" || value === "publish-timeout" || value === "adapter-rule") {
     return value
   }
   throw new Error(`unsupported proxy smoke: ${value}`)
 }
+
+const { positional, transport } = parseTransportFlag(process.argv.slice(2))
+await runProxySmoke(parseSmokeKind(positional[0] ?? "write-timeout"), transport)

@@ -1,11 +1,11 @@
 import {
   type CallToolRequest,
   type CallToolResult,
-  CallToolResultSchema,
-  ErrorCode,
-  McpError,
+  ProtocolError,
+  ProtocolErrorCode,
+  SdkErrorCode,
   type Tool,
-} from "@modelcontextprotocol/sdk/types.js"
+} from "@modelcontextprotocol/server"
 import { createTraceId } from "../core/structured-error-model.js"
 import type { SideEffectType } from "../core/taxonomy.js"
 import type { TraceRecord } from "../trace/trace-model.js"
@@ -30,7 +30,8 @@ export async function handleCallToolRequest(
   const mapping = runtime.registry.mappings.get(request.params.name)
   const argumentsValue = request.params.arguments ?? {}
   if (mapping === undefined) {
-    throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${request.params.name}`)
+    // Unknown tools stay JSON-RPC protocol errors, as MCP requires.
+    throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${request.params.name}`)
   }
 
   const callContext: UpstreamCallContext = {
@@ -62,24 +63,22 @@ async function callUpstream(
       name: callContext.mapping.upstreamName,
       arguments: callContext.argumentsValue,
     },
-    undefined,
     { timeout: runtime.config.proxy.default_timeout_ms },
   )
   const durationMs = Date.now() - callContext.startedAt
 
-  const parsedResult = CallToolResultSchema.parse(result)
-  if (parsedResult.isError === true) {
+  if (result.isError === true) {
     return appendFailure(runtime, {
       ...failureBase(callContext),
       rawError: null,
-      rawResult: parsedResult,
+      rawResult: result,
       durationMs,
       timedOut: false,
     })
   }
 
   await appendSuccess(runtime, callContext, durationMs)
-  return trimResult(parsedResult, runtime.config.proxy.max_result_chars)
+  return trimResult(result, runtime.config.proxy.max_result_chars)
 }
 
 function failureBase(
@@ -137,7 +136,7 @@ function summarizeTraceError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function inferSideEffect(tool: Tool): SideEffectType {
+export function inferSideEffect(tool: Tool): SideEffectType {
   if (tool.annotations?.destructiveHint === true) {
     return "destructive"
   }
@@ -161,11 +160,13 @@ function containsToolVerb(toolName: string, verbs: readonly string[]): boolean {
 }
 
 function isRequestTimeout(error: unknown): boolean {
+  // Matched on the stable `code` field rather than `instanceof`: the error
+  // originates in the client package and this handler runs in the server one.
   return (
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
-    error.code === ErrorCode.RequestTimeout
+    error.code === SdkErrorCode.RequestTimeout
   )
 }
 

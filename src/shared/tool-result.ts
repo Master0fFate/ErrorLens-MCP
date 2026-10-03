@@ -1,4 +1,5 @@
-import { type CallToolResult, CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js"
+import { CallToolResultSchema } from "@modelcontextprotocol/core"
+import type { CallToolResult } from "@modelcontextprotocol/server"
 
 export function jsonToolResult(value: unknown, isError = false): CallToolResult {
   const structuredContent = asStructuredContent(value)

@@ -17,6 +17,7 @@ test("stdioParameters passes only explicit upstream env overrides", () => {
       args: ["server.js"],
       env: { UPSTREAM_TOKEN: "allowed" },
       adapter_rules: [],
+      negotiation: "legacy",
     })
 
     assert.deepEqual(parameters.env, { UPSTREAM_TOKEN: "allowed" })

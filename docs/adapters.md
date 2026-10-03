@@ -34,7 +34,7 @@ rules:
 Run:
 
 ```sh
-node dist/cli/index.js rules test --file ./rules/github.yaml
+errorlens rules test --file ./rules/github.yaml
 ```
 
 Load rules into proxy classification with paths relative to the ErrorLens config:

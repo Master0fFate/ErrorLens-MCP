@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "errorlens": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "mcp-errorlens", "companion"]
+    }
+  }
+}

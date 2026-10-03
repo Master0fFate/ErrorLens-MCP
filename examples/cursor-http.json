@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "errorlens": {
+      "url": "http://127.0.0.1:3939/mcp"
+    }
+  }
+}

@@ -1,5 +1,12 @@
 import { z } from "zod"
 
+/**
+ * How the proxy opens a connection to an upstream server. `legacy` is the
+ * classic `initialize` handshake every MCP server understands; `auto` probes
+ * for the 2026-07-28 protocol revision first and falls back to `initialize`.
+ */
+const NegotiationSchema = z.enum(["legacy", "auto"]).default("legacy")
+
 const ServerConfigSchema = z.discriminatedUnion("transport", [
   z.object({
     transport: z.literal("stdio"),
@@ -8,12 +15,14 @@ const ServerConfigSchema = z.discriminatedUnion("transport", [
     cwd: z.string().optional(),
     env: z.record(z.string(), z.string()).default({}),
     adapter_rules: z.array(z.string()).default([]),
+    negotiation: NegotiationSchema,
   }),
   z.object({
     transport: z.literal("streamable_http"),
-    url: z.string().url(),
+    url: z.url(),
     headers: z.record(z.string(), z.string()).default({}),
     adapter_rules: z.array(z.string()).default([]),
+    negotiation: NegotiationSchema,
   }),
 ])
 

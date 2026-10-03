@@ -1,0 +1,10 @@
+{
+  "context_servers": {
+    "errorlens": {
+      "source": "custom",
+      "command": "npx",
+      "args": ["-y", "mcp-errorlens", "companion"],
+      "env": {}
+    }
+  }
+}

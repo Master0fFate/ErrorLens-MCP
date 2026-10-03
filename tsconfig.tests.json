@@ -4,8 +4,7 @@
     "outDir": "dist-tests",
     "rootDir": ".",
     "declaration": false,
-    "declarationMap": false,
-    "tsBuildInfoFile": "dist-tests/tsconfig.tests.tsbuildinfo"
+    "declarationMap": false
   },
   "include": ["src/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist", "dist-tests"]

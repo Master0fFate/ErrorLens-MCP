@@ -1,0 +1,32 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.master0ffate/errorlens",
+  "title": "ErrorLens",
+  "description": "Turns vague MCP tool failures into structured, retry-aware recovery guidance: stable error codes, retry safety, side-effect state, and next steps.",
+  "version": "0.2.0",
+  "websiteUrl": "https://github.com/Master0fFate/ErrorLens-MCP#readme",
+  "repository": {
+    "url": "https://github.com/Master0fFate/ErrorLens-MCP",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "mcp-errorlens",
+      "version": "0.2.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "companion",
+          "valueHint": "subcommand",
+          "description": "Start the ErrorLens diagnostic server over stdio."
+        }
+      ]
+    }
+  ]
+}

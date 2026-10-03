@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js"
+import { ProtocolError, ProtocolErrorCode } from "@modelcontextprotocol/server"
 import { defaultConfig } from "../src/config/config-model.js"
 import { handleCallToolRequest } from "../src/proxy/call-handler.js"
 import type { ProxyRuntime } from "../src/proxy/proxy-model.js"
@@ -24,8 +24,8 @@ test("proxy reports an unknown tool as an MCP protocol error", async () => {
       params: { name: "missing_tool" },
     }),
     (error: unknown) =>
-      error instanceof McpError &&
-      error.code === ErrorCode.InvalidParams &&
+      error instanceof ProtocolError &&
+      error.code === ProtocolErrorCode.InvalidParams &&
       error.message.includes("Unknown tool: missing_tool"),
   )
 })

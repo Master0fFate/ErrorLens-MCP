@@ -1,9 +1,15 @@
 import { pathToFileURL } from "node:url"
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
+import { McpServer } from "@modelcontextprotocol/server"
+import { serveStdio } from "@modelcontextprotocol/server/stdio"
 import { z } from "zod"
 
-export function buildFakeBrokenServer(): McpServer {
+export type FakeBrokenServerOptions = {
+  /** How long write-like tools stall before answering; the proxy smoke times out well before this. */
+  readonly writeDelayMs?: number
+}
+
+export function buildFakeBrokenServer(options: FakeBrokenServerOptions = {}): McpServer {
+  const writeDelayMs = options.writeDelayMs ?? 2_000
   const server = new McpServer({
     name: "fake-broken-server",
     version: "0.1.0",
@@ -13,9 +19,9 @@ export function buildFakeBrokenServer(): McpServer {
     "search_docs",
     {
       description: "Sometimes returns a vague upstream 503.",
-      inputSchema: {
+      inputSchema: z.object({
         query: z.string(),
-      },
+      }),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -32,10 +38,10 @@ export function buildFakeBrokenServer(): McpServer {
     "create_ticket",
     {
       description: "Simulates a write that times out after dispatch.",
-      inputSchema: {
+      inputSchema: z.object({
         title: z.string(),
         api_key: z.string().optional(),
-      },
+      }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -43,7 +49,7 @@ export function buildFakeBrokenServer(): McpServer {
       },
     },
     async ({ title }) => {
-      await delay(2_000)
+      await delay(writeDelayMs)
       return {
         content: [{ type: "text", text: `created ticket: ${title}` }],
       }
@@ -54,12 +60,12 @@ export function buildFakeBrokenServer(): McpServer {
     "publish",
     {
       description: "Unannotated publish-like tool that times out after dispatch.",
-      inputSchema: {
+      inputSchema: z.object({
         message: z.string(),
-      },
+      }),
     },
     async ({ message }) => {
-      await delay(2_000)
+      await delay(writeDelayMs)
       return {
         content: [{ type: "text", text: `published: ${message}` }],
       }
@@ -70,10 +76,10 @@ export function buildFakeBrokenServer(): McpServer {
     "update_record",
     {
       description: "Returns validation-like errors.",
-      inputSchema: {
+      inputSchema: z.object({
         id: z.string(),
         status: z.string(),
-      },
+      }),
     },
     async () => ({
       content: [{ type: "text", text: "Invalid field type: status must be an enum value" }],
@@ -85,9 +91,9 @@ export function buildFakeBrokenServer(): McpServer {
     "delete_file",
     {
       description: "Blocked by policy.",
-      inputSchema: {
+      inputSchema: z.object({
         path: z.string(),
-      },
+      }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -100,11 +106,27 @@ export function buildFakeBrokenServer(): McpServer {
     }),
   )
 
+  server.registerTool(
+    "echo",
+    {
+      description: "Returns its input; the one tool here that succeeds.",
+      inputSchema: z.object({
+        text: z.string(),
+      }),
+      annotations: {
+        readOnlyHint: true,
+      },
+    },
+    async ({ text }) => ({
+      content: [{ type: "text", text }],
+    }),
+  )
+
   return server
 }
 
-export async function startFakeBrokenServer(): Promise<void> {
-  await buildFakeBrokenServer().connect(new StdioServerTransport())
+export function startFakeBrokenServer(): void {
+  serveStdio(() => buildFakeBrokenServer())
 }
 
 function delay(ms: number): Promise<void> {
@@ -115,5 +137,5 @@ function delay(ms: number): Promise<void> {
 
 const entry = process.argv[1]
 if (entry !== undefined && import.meta.url === pathToFileURL(entry).href) {
-  await startFakeBrokenServer()
+  startFakeBrokenServer()
 }

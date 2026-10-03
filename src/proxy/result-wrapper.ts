@@ -1,4 +1,4 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
+import type { CallToolResult } from "@modelcontextprotocol/server"
 import type { AdapterRule } from "../core/adapters.js"
 import { classifyError, summarizeUnknown } from "../core/classifier.js"
 import { redactText, redactUnknown } from "../core/redaction.js"
