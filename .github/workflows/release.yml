@@ -1,8 +1,15 @@
 name: Release
 
 # Publishes a GitHub release whenever the version in package.json has no
-# matching v<version> tag yet. Runs on every push to main (and on demand) and
-# exits early when the tag already exists, so it is safe to re-run.
+# matching v<version> tag yet, then publishes that version to npm if it is
+# not there yet. Runs on every push to main (and on demand); every step exits
+# early when its artifact already exists, so it is safe to re-run.
+#
+# npm publishing needs one of:
+#   - npm trusted publishing (OIDC): on npmjs.com, package settings ->
+#     Trusted Publisher -> GitHub Actions, repository Master0fFate/ErrorLens-MCP,
+#     workflow release.yml. No secret needed.
+#   - an NPM_TOKEN repository secret (automation token).
 
 on:
   push:
@@ -12,6 +19,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   group: release
@@ -87,3 +95,46 @@ jobs:
             --title "${{ steps.version.outputs.tag }}" \
             --notes-file release-body.md \
             --latest
+
+  publish-npm:
+    name: Publish to npm
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (actions/checkout v6.1.0 pinned)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+
+      - name: Setup Node (actions/setup-node v6.5.0 pinned)
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.x
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Check whether this version is already on npm
+        id: npm
+        run: |
+          NAME="$(node -p "require('./package.json').name")"
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if npm view "$NAME@$VERSION" version > /dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "$NAME@$VERSION is already on npm; nothing to publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        if: steps.npm.outputs.published == 'false'
+        run: |
+          npm ci
+          npm run build
+          npm test
+
+      - name: Publish
+        if: steps.npm.outputs.published == 'false'
+        env:
+          # Empty when the secret is not set; npm then falls back to trusted
+          # publishing through the workflow's OIDC token.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance

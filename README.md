@@ -290,5 +290,11 @@ release notes.
 
 Bump `version` in `package.json` and `server.json`, add a `## [x.y.z]` section
 to `CHANGELOG.md`, and push to `main`. The Release workflow verifies the build,
-creates the `vx.y.z` tag, and publishes a GitHub release whose notes are that
-changelog section. Publishing to npm (`npm publish`) remains a manual step.
+creates the `vx.y.z` tag, publishes a GitHub release whose notes are that
+changelog section, and then publishes the package to npm with provenance.
+
+npm publishing works once the package trusts the workflow (npmjs.com: package
+settings, Trusted Publisher, GitHub Actions, repository
+`Master0fFate/ErrorLens-MCP`, workflow `release.yml`) or an `NPM_TOKEN`
+repository secret exists. Re-running the workflow is safe: steps whose
+artifact already exists are skipped.
